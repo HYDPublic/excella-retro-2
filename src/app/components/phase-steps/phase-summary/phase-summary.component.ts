@@ -1,9 +1,10 @@
-import { Component, OnInit, Input } from '@angular/core';
+import { Component, OnInit, OnDestroy, Input } from '@angular/core';
 import { AngularFire, FirebaseObjectObservable, FirebaseListObservable } from 'angularfire2';
 import { ChildComponentData } from '../../../models/child-component-data';
 import { Phase } from '../../../models/phase';
 import { Group } from '../../../models/group';
 import { Vote } from '../../../models/vote';
+import { Subscription } from 'rxjs/Subscription';
 import '../../../shared/rxjs-operators';
 
 @Component({
@@ -11,7 +12,7 @@ import '../../../shared/rxjs-operators';
   templateUrl: './phase-summary.component.html',
   styleUrls: ['./phase-summary.component.css']
 })
-export class PhaseSummaryComponent implements OnInit {
+export class PhaseSummaryComponent implements OnInit, OnDestroy {
   @Input() data: ChildComponentData;
   retroId: string;
   currentPhaseId: string;
@@ -19,33 +20,44 @@ export class PhaseSummaryComponent implements OnInit {
   groups: Group[];
   totalVotes: Vote[];
 
+  retroSubscription: Subscription;
+  currentPhaseSubscription: Subscription;
+  groupsSubscription: Subscription;
+  totalVotesSubscription: Subscription;
+
   constructor(private af: AngularFire) { }
 
   ngOnInit() {
-    const self = this;
-    this.data.retroObservable.subscribe(retroVal => {
-      self.retroId = retroVal.$key;
-      self.currentPhaseId = retroVal.currentPhaseId;
-      self.af.database.object('phases/' + self.currentPhaseId).subscribe(currentPhaseVal => {
-        self.currentPhase = currentPhaseVal;
-        self.af.database.list('groups', {
+    this.retroSubscription = this.data.retroObservable.subscribe(retroVal => {
+      this.retroId = retroVal.$key;
+      this.currentPhaseId = retroVal.currentPhaseId;
+      this.currentPhaseSubscription = this.af.database.object('phases/' + this.currentPhaseId).subscribe(currentPhaseVal => {
+        this.currentPhase = currentPhaseVal;
+        this.groupsSubscription = this.af.database.list('groups', {
           query: {
             orderByChild: 'phaseId',
-            equalTo: self.currentPhaseId
+            equalTo: this.currentPhaseId
           }
         }).subscribe(groupsVal => {
-          self.groups = groupsVal;
-          self.af.database.list('votes', {
+          this.groups = groupsVal;
+          this.totalVotesSubscription = this.af.database.list('votes', {
             query: {
               orderByChild: 'phaseId',
-              equalTo: self.currentPhaseId
+              equalTo: this.currentPhaseId
             }
           }).subscribe(votesList => {
-            self.totalVotes = votesList;
+            this.totalVotes = votesList;
           });
         });
       });
     });
+  }
+
+  ngOnDestroy() {
+    this.retroSubscription.unsubscribe();
+    this.currentPhaseSubscription.unsubscribe();
+    this.groupsSubscription.unsubscribe();
+    this.totalVotesSubscription.unsubscribe();
   }
 
   getVoteCountForGroup(group: Group) {
